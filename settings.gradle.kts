@@ -163,6 +163,8 @@ pluginManagement {
     val predictedSuffix = " [$predictedIdentifier]"
     val fallbackSuffix = " [$fallbackIdentifier]"
 
+    println(System.getProperties())
+
     /* Nullable. */
     val platform = System.getProperty("idea.paths.selector") ?: System.getProperty("idea.platform.prefix") ?: unknownIdentifier
 
