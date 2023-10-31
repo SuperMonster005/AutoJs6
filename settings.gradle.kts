@@ -26,6 +26,7 @@ include(
 pluginManagement {
 
     val fallbackIdentifier = "fallback"
+    val unknownIdentifier = "unknown"
 
     // @Hint by SuperMonster003 on May 3, 2023.
     //  ! To download archives of Android Studio,
@@ -91,7 +92,7 @@ pluginManagement {
                 fallbackIdentifier to "1.8.21", /* May 3, 2023. */
             ),
         ),
-        "unknown" to mapOf(
+        unknownIdentifier to mapOf(
             "android" to mapOf(
                 fallbackIdentifier to "8.1.2", /* Oct 30, 2023. */
             ),
@@ -153,30 +154,67 @@ pluginManagement {
     val platformIdentifierForIdea = "IntelliJIdea"
     val vendorNameForIdea = "Jetbrains"
 
-    fun uppercaseFirstChar(s: String) = s[0].uppercase() + s.substring(1)
+    fun uppercaseFirstChar(s: String) = when (s.isEmpty()) {
+        true -> ""
+        else -> s[0].uppercase() + s.substring(1)
+    }
 
-    val unknownIdentifier = "unknown"
     val unknownIdentifier1Up = uppercaseFirstChar(unknownIdentifier)
+    val unexpectedIdentifier = "unexpected"
     val predictedIdentifier = "predicted"
     val unfocusedIdentifier = "unfocused"
     val unfocusedSuffix = " [$unfocusedIdentifier]"
     val predictedSuffix = " [$predictedIdentifier]"
     val fallbackSuffix = " [$fallbackIdentifier]"
 
-    println(System.getProperties())
-
     /* Nullable. */
-    val platform = System.getProperty("idea.paths.selector") ?: System.getProperty("idea.platform.prefix") ?: unknownIdentifier
+    // val platform = System.getProperty("idea.paths.selector") ?: System.getProperty("idea.platform.prefix")
+    val platform: String? = null
 
-    val isPlatformAS = platform?.startsWith(platformIdentifierForAS) == true
-            || System.getProperty("idea.vendor.name").equals(vendorNameForAS, true)
-    val isPlatformIdea = platform?.startsWith(platformIdentifierForIdea) == true
-            || System.getProperty("idea.vendor.name").equals(vendorNameForIdea, true)
+    val isPlatformAS = false
+    val isPlatformIdea = false
 
     val platformType = when {
         isPlatformAS -> "as"
         isPlatformIdea -> "idea"
-        else -> unknownIdentifier
+        else -> unknownIdentifier.also {
+            when (platform) {
+                null -> {
+                    println("Current platform is $unknownIdentifier")
+                    val concernedKeyWords = arrayOf("name", "vendor", "version", "platform", "paths")
+                    val unconcernedKeys = arrayOf(
+                        "java.class.version",
+                        "java.vm.name",
+                        "java.vm.version",
+                        "java.version",
+                    )
+                    val unconcernedKeyWords = arrayOf("url", "user", "runtime", "specification", "os", "date")
+                    var concernedValues = emptyArray<String>()
+                    System.getProperties().forEach { entry ->
+                        entry.key.let { key ->
+                            if (key !is String) {
+                                return@let
+                            }
+                            if (!concernedKeyWords.any { s -> key.split(Regex("\\W")).contains(s) }) {
+                                return@let
+                            }
+                            if (unconcernedKeyWords.any { s -> key.split(Regex("\\W")).contains(s) }) {
+                                return@let
+                            }
+                            if (unconcernedKeys.any { s -> key.equals(s, true) }) {
+                                return@let
+                            }
+                            concernedValues += "[ $key: ${entry.value} ]"
+                        }
+                    }
+                    if (concernedValues.isNotEmpty()) {
+                        println("However, here are some properties may be useful for determining platform information")
+                        concernedValues.forEach { println(it) }
+                    }
+                }
+                else -> println("$unexpectedIdentifier platform: $platform")
+            }
+        }
     }
 
     val previewIdentifier = when {
@@ -185,12 +223,12 @@ pluginManagement {
         else -> ""
     }
 
-    val previewIdentifier1Up = previewIdentifier ?: uppercaseFirstChar(previewIdentifier)
+    val previewIdentifier1Up = uppercaseFirstChar(previewIdentifier)
 
     val platformVersion = (System.getProperty("idea.version") ?: when {
         isPlatformAS -> platform?.substring(platformIdentifierForAS.length)
         isPlatformIdea -> platform?.substring(platformIdentifierForIdea.length)
-        else -> unknownIdentifier
+        else -> null
     } ?: throw Exception("$unknownIdentifier1Up platform version"))
         .let { rawVersion ->
             platform?.let { rawVersion }
