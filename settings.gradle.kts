@@ -153,6 +153,7 @@ pluginManagement {
     val vendorNameForAS = "Google"
     val platformIdentifierForIdea = "IntelliJIdea"
     val vendorNameForIdea = "Jetbrains"
+    val defaultVersion = "0"
 
     fun uppercaseFirstChar(s: String) = when (s.isEmpty()) {
         true -> ""
@@ -168,11 +169,12 @@ pluginManagement {
     val fallbackSuffix = " [$fallbackIdentifier]"
 
     /* Nullable. */
-    // val platform = System.getProperty("idea.paths.selector") ?: System.getProperty("idea.platform.prefix")
-    val platform: String? = null
+    val platform = System.getProperty("idea.paths.selector") ?: System.getProperty("idea.platform.prefix")
 
-    val isPlatformAS = false
-    val isPlatformIdea = false
+    val isPlatformAS = platform?.startsWith(platformIdentifierForAS) == true
+            || System.getProperty("idea.vendor.name").equals(vendorNameForAS, true)
+    val isPlatformIdea = platform?.startsWith(platformIdentifierForIdea) == true
+            || System.getProperty("idea.vendor.name").equals(vendorNameForIdea, true)
 
     val platformType = when {
         isPlatformAS -> "as"
@@ -225,18 +227,17 @@ pluginManagement {
 
     val previewIdentifier1Up = uppercaseFirstChar(previewIdentifier)
 
-    val platformVersion = (System.getProperty("idea.version") ?: when {
+    val platformVersion = System.getProperty("idea.version") ?: when {
         isPlatformAS -> platform?.substring(platformIdentifierForAS.length)
         isPlatformIdea -> platform?.substring(platformIdentifierForIdea.length)
         else -> null
-    } ?: throw Exception("$unknownIdentifier1Up platform version"))
-        .let { rawVersion ->
-            platform?.let { rawVersion }
-                ?: when (rawVersion.contains(previewIdentifier, true)) {
-                    true -> rawVersion
-                    else -> "$previewIdentifier1Up$rawVersion"
-                }
-        }
+    }?.let { rawVersion ->
+        platform?.let { rawVersion }
+            ?: when (rawVersion.contains(previewIdentifier, true)) {
+                true -> rawVersion
+                else -> "$previewIdentifier1Up$rawVersion"
+            }
+    } ?: defaultVersion
 
     val platformVersionUnfocused = platformVersion.replace(Regex("(.+)(\\.\\d+)(\\.\\d+$)"), "$1$2")
 
