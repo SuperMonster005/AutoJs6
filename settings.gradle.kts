@@ -55,7 +55,7 @@ pluginManagement {
             ),
             "android" to mapOf(
                 "Preview2023.2" to "8.3.0-alpha11", /* Oct 27, 2023. */
-                "2023.1" to "8.2.0-rc01", /* Oct 18, 2023. */
+                "2023.1" to "8.2.0-rc02", /* Oct 31, 2023. */
                 "Preview2023.1" to "8.2.0-beta06", /* Oct 11, 2023. */
                 "2022.3" to "8.1.2", /* Sep 29, 2023. */
                 "Preview2022.3" to "8.1.0-beta05", /* Jun 14 2023. */
@@ -92,6 +92,16 @@ pluginManagement {
                 fallbackIdentifier to "1.8.21", /* May 3, 2023. */
             ),
         ),
+        "temurin" to mapOf(
+            "android" to mapOf(
+                "20.0.2+9" to "8.1.2", /* Oct 31, 2023. */
+                fallbackIdentifier to "8.1.2", /* Oct 30, 2023. */
+            ),
+            "kotlin" to mapOf(
+                "20.0.2+9" to "1.9.20-RC2", /* Oct 31, 2023. */
+                fallbackIdentifier to "1.8.21", /* May 3, 2023. */
+            ),
+        ),
         unknownIdentifier to mapOf(
             "android" to mapOf(
                 fallbackIdentifier to "8.1.2", /* Oct 30, 2023. */
@@ -99,7 +109,7 @@ pluginManagement {
             "kotlin" to mapOf(
                 fallbackIdentifier to "1.8.21", /* May 3, 2023. */
             ),
-        )
+        ),
     )
 
     val kspPluginVersionMap = mapOf(
@@ -153,6 +163,8 @@ pluginManagement {
     val vendorNameForAS = "Google"
     val platformIdentifierForIdea = "IntelliJIdea"
     val vendorNameForIdea = "Jetbrains"
+    val platformIdentifierForTemurin = "Temurin"
+    val vendorNameForTemurin = "Adoptium" /* More common as "Eclipse Adoptium". */
     val defaultVersion = "0"
 
     fun uppercaseFirstChar(s: String) = when (s.isEmpty()) {
@@ -168,51 +180,91 @@ pluginManagement {
     val predictedSuffix = " [$predictedIdentifier]"
     val fallbackSuffix = " [$fallbackIdentifier]"
 
-    /* Nullable. */
-    val platform = System.getProperty("idea.paths.selector") ?: System.getProperty("idea.platform.prefix")
+    // @TestCases
+    //  ! Android Studio: AndroidStudio2023.1 (from idea.paths.selector); AndroidStudio (from idea.platform.prefix)
+    //  ! Android Studio Preview: AndroidStudioPreview2023.2 (from idea.paths.selector); AndroidStudio (from idea.platform.prefix)
+    //  ! IntelliJ Idea: IntelliJIdea2023.2 (from idea.paths.selector); JBR-17.0.8.1+7-1000.32-jcef (from java.vendor.version)
+    //  ! IntelliJ Idea Preview: null
+    //  ! Temurin: Temurin-20.0.2+9 (from java.vendor.version)
+    //  ! Others: null
+    val platform: String? = System.getProperty("idea.paths.selector")
+        ?: System.getProperty("idea.platform.prefix")
+        ?: System.getProperty("java.vendor.version")
 
-    val isPlatformAS = platform?.startsWith(platformIdentifierForAS) == true
-            || System.getProperty("idea.vendor.name").equals(vendorNameForAS, true)
-    val isPlatformIdea = platform?.startsWith(platformIdentifierForIdea) == true
-            || System.getProperty("idea.vendor.name").equals(vendorNameForIdea, true)
+    // @TestCases
+    //  ! Android Studio: Google (from idea.vendor.name)
+    //  ! Android Studio Preview: Google (from idea.vendor.name)
+    //  ! IntelliJ Idea: JetBrains (from idea.vendor.name)
+    //  ! IntelliJ Idea Preview: JetBrains (from idea.vendor.name)
+    //  ! Temurin: Eclipse Adoptium (from java.vendor); Eclipse Adoptium (from java.vm.vendor)
+    //  ! Others: null
+    val vendorName: String? = System.getProperty("idea.vendor.name")
+        ?: System.getProperty("java.vendor")
+        ?: System.getProperty("java.vm.vendor")
+
+    // @TestCases
+    //  ! Android Studio: 2023.1
+    //  ! Android Studio Preview: 2023.1
+    //  ! IntelliJ Idea: 2023.2.4
+    //  ! IntelliJ Idea Preview: 2023.3
+    //  ! Temurin: null
+    //  ! Others: null
+    val versionFromProperty: String? = System.getProperty("idea.version")
+
+    val isPlatformAS = platform?.startsWith(platformIdentifierForAS) ?: false
+            || vendorName?.contains(vendorNameForAS, true) ?: false
+    val isPlatformIdea = platform?.startsWith(platformIdentifierForIdea) ?: false
+            || vendorName?.contains(vendorNameForIdea, true) ?: false
+    val isPlatformTemurin = platform?.startsWith(platformIdentifierForTemurin) ?: false
+            || vendorName?.contains(vendorNameForTemurin, true) ?: false
 
     val platformType = when {
         isPlatformAS -> "as"
         isPlatformIdea -> "idea"
+        isPlatformTemurin -> "temurin"
         else -> unknownIdentifier.also {
             when (platform) {
                 null -> {
-                    println("Current platform is $unknownIdentifier")
                     val concernedKeyWords = arrayOf("name", "vendor", "version", "platform", "paths")
+                    val unconcernedKeyWords = arrayOf("url", "user", "runtime", "specification", "os", "date")
                     val unconcernedKeys = arrayOf(
                         "java.class.version",
                         "java.vm.name",
                         "java.vm.version",
                         "java.version",
                     )
-                    val unconcernedKeyWords = arrayOf("url", "user", "runtime", "specification", "os", "date")
                     var concernedValues = emptyArray<String>()
                     System.getProperties().forEach { entry ->
-                        entry.key.let { key ->
-                            if (key !is String) {
-                                return@let
-                            }
-                            if (!concernedKeyWords.any { s -> key.split(Regex("\\W")).contains(s) }) {
-                                return@let
-                            }
-                            if (unconcernedKeyWords.any { s -> key.split(Regex("\\W")).contains(s) }) {
-                                return@let
-                            }
-                            if (unconcernedKeys.any { s -> key.equals(s, true) }) {
-                                return@let
-                            }
-                            concernedValues += "[ $key: ${entry.value} ]"
+                        val (key) = entry
+                        when {
+                            key !is String -> return@forEach
+                            unconcernedKeys.any { s -> key.equals(s, true) } -> return@forEach
+                            unconcernedKeyWords.any { s -> key.split(Regex("\\W")).contains(s) } -> return@forEach
+                            !concernedKeyWords.any { s -> key.split(Regex("\\W")).contains(s) } -> return@forEach
+                            else -> concernedValues += "[ $key: ${entry.value} ]"
                         }
                     }
-                    if (concernedValues.isNotEmpty()) {
-                        println("However, here are some properties may be useful for determining platform information")
-                        concernedValues.forEach { println(it) }
-                    }
+                    val title = "Current platform is $unknownIdentifier"
+                    val subtitle = "However, here are some props may be useful for determining platform info"
+                    val maxLength = concernedValues.plus(title).plus(subtitle).maxOf { it.length }
+
+                    when {
+                        concernedValues.isNotEmpty() -> arrayOf(
+                            "=".repeat(maxLength),
+                            title,
+                            subtitle,
+                            "-".repeat(maxLength),
+                            *concernedValues,
+                            "=".repeat(maxLength),
+                            "",
+                        )
+                        else -> arrayOf(
+                            "=".repeat(maxLength),
+                            title,
+                            "=".repeat(maxLength),
+                            "",
+                        )
+                    }.forEach { println(it) }
                 }
                 else -> println("$unexpectedIdentifier platform: $platform")
             }
@@ -220,24 +272,37 @@ pluginManagement {
     }
 
     val previewIdentifier = when {
-        isPlatformAS -> "preview"
         isPlatformIdea -> "eap"
-        else -> ""
+        else -> "preview"
     }
 
     val previewIdentifier1Up = uppercaseFirstChar(previewIdentifier)
 
-    val platformVersion = System.getProperty("idea.version") ?: when {
-        isPlatformAS -> platform?.substring(platformIdentifierForAS.length)
-        isPlatformIdea -> platform?.substring(platformIdentifierForIdea.length)
-        else -> null
-    }?.let { rawVersion ->
-        platform?.let { rawVersion }
-            ?: when (rawVersion.contains(previewIdentifier, true)) {
-                true -> rawVersion
-                else -> "$previewIdentifier1Up$rawVersion"
+    val platformVersion = let {
+        if (versionFromProperty != null) {
+            if (platform == null) {
+                if (isPlatformIdea) {
+                    return@let "$previewIdentifier1Up$versionFromProperty"
+                } else {
+                    return@let versionFromProperty
+                }
+            } else {
+                if (platform.contains(previewIdentifier, true)) {
+                    return@let "$previewIdentifier1Up$versionFromProperty"
+                } else {
+                    return@let versionFromProperty
+                }
             }
-    } ?: defaultVersion
+        } else {
+            platform ?: return@let defaultVersion
+            when {
+                isPlatformAS -> platform.substring(platformIdentifierForAS.length)
+                isPlatformIdea -> platform.substring(platformIdentifierForIdea.length)
+                isPlatformTemurin -> platform.substring(platformIdentifierForTemurin.length)
+                else -> defaultVersion
+            }.replace(Regex("^\\W*"), "")
+        }
+    }
 
     val platformVersionUnfocused = platformVersion.replace(Regex("(.+)(\\.\\d+)(\\.\\d+$)"), "$1$2")
 
@@ -265,6 +330,10 @@ pluginManagement {
         }
 
         dependencies /* Gather platform information. */ {
+            val isPreview = platformVersion.contains(previewIdentifier1Up, true)
+            val previewSuffix = if (isPreview) " ($previewIdentifier)" else ""
+            val niceVersion = if (isPreview) platformVersion.substring(previewIdentifier1Up.length) else platformVersion
+            val versionSuffix = if (niceVersion.isNotEmpty() && niceVersion != defaultVersion) " | $niceVersion" else ""
             when {
                 isPlatformAS -> {
                     var isPredicted = false
@@ -279,17 +348,11 @@ pluginManagement {
                             }
                         }
                     } ?: ""
-
-                    val isPreview = platformVersion.contains(previewIdentifier1Up, true)
-                    val previewSuffix = if (isPreview) " ($previewIdentifier)" else ""
-                    val niceVersion = if (isPreview) platformVersion.substring(previewIdentifier1Up.length) else platformVersion
-
-                    "Android Studio$platformCodeName$previewSuffix${if (niceVersion.isNotEmpty()) " | $niceVersion" else ""}"
+                    "Android Studio$platformCodeName$previewSuffix$versionSuffix"
                 }
                 isPlatformIdea -> {
-                    val isEap = platformVersion.contains(previewIdentifier1Up, true)
                     val isPredicted = platform == null
-                    val suffix = when (isEap) {
+                    val previewSuffixOverride = when (isPreview) {
                         true -> when (isPredicted) {
                             true -> " [ ${previewIdentifier.uppercase()} ($predictedIdentifier) ]"
                             else -> " ${previewIdentifier.uppercase()}"
@@ -299,9 +362,10 @@ pluginManagement {
                             else -> ""
                         }
                     }
-                    val niceVersion = if (isEap) platformVersion.substring(previewIdentifier1Up.length) else platformVersion
-
-                    "IntelliJ IDEA$suffix${if (niceVersion.isNotEmpty()) " | $niceVersion" else ""}"
+                    "IntelliJ IDEA$previewSuffixOverride$versionSuffix"
+                }
+                isPlatformTemurin -> {
+                    "Temurin$previewSuffix$versionSuffix"
                 }
                 else -> unknownIdentifier1Up
             }.let { infoList += "Platform: $it" }
